@@ -1,137 +1,1032 @@
-// ════════════════════════════════════════════════════
-//  團體訂餐系統 — Google Apps Script 後端
-//  使用 PropertiesService 儲存 + Gemini AI 辨識菜單
-// ════════════════════════════════════════════════════
- 
-const GEMINI_API_KEY = 'AIzaSyDiM2CClCx2rivVlv1KRTH6qgJiXBn_jfU';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + GEMINI_API_KEY;
- 
-function doGet(e)  { return handle(e); }
-function doPost(e) { return handle(e); }
- 
-function handle(e) {
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>團體訂餐系統</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#faf7f2; --surface:#fff; --surface2:#f3ede3;
+    --accent:#c8410a; --accent2:#e8622a; --accent-light:#fde8dd;
+    --green:#3d9e5f; --green-light:#dcfce7;
+    --red:#e53e3e; --blue:#2563eb; --blue-light:#dbeafe;
+    --text:#1a1208; --text2:#5c4a35; --text3:#9e8b78;
+    --border:#e5ddd0; --shadow:0 2px 16px rgba(26,18,8,.08);
+    --radius:16px; --radius-sm:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+  header{background:var(--text);padding:14px 28px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:200;box-shadow:0 2px 20px rgba(0,0,0,.3);}
+  header .logo{font-family:'DM Serif Display',serif;color:#fff;font-size:20px;}
+  header .logo span{color:var(--accent2);}
+  #hdr-info{margin-left:16px;display:none;}
+  #hdr-name{color:#fff;font-weight:700;font-size:15px;}
+  #hdr-sub{color:var(--text3);font-size:12px;margin-top:2px;}
+  #hdr-status{margin-left:auto;display:none;}
+  .sbadge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;}
+  .s-open{background:var(--green-light);color:var(--green);}
+  .s-closed{background:#fee2e2;color:var(--red);}
+  .sdot{width:8px;height:8px;border-radius:50%;background:currentColor;animation:pulse 1.4s ease infinite;}
+  .s-closed .sdot{animation:none;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  .steps{display:flex;background:var(--surface);border-bottom:2px solid var(--border);padding:0 28px;overflow-x:auto;}
+  .stab{padding:15px 22px;font-size:14px;font-weight:500;color:var(--text3);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap;transition:all .2s;display:flex;align-items:center;gap:8px;margin-bottom:-2px;}
+  .stab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .stab .sn{width:22px;height:22px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+  .stab.active .sn{background:var(--accent);color:#fff;}
+  .stab.done .sn{background:var(--green);color:#fff;}
+
+  main{max-width:1100px;margin:0 auto;padding:28px 24px;}
+  .panel{display:none;}.panel.active{display:block;}
+
+  .card{background:var(--surface);border-radius:var(--radius);padding:26px;margin-bottom:20px;box-shadow:var(--shadow);border:1px solid var(--border);}
+  .card-title{font-size:15px;font-weight:700;margin-bottom:18px;color:var(--text);display:flex;align-items:center;gap:8px;}
+
+  .upload-zone{border:2.5px dashed var(--border);border-radius:var(--radius);padding:44px 24px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface2);}
+  .upload-zone:hover,.upload-zone.drag-over{border-color:var(--accent);background:var(--accent-light);}
+  .upload-zone .ui{font-size:44px;margin-bottom:10px;}
+  .upload-zone h3{font-size:17px;font-weight:700;margin-bottom:6px;}
+  .upload-zone p{color:var(--text3);font-size:13px;}
+  .upload-zone input{display:none;}
+  #img-preview{display:none;margin-top:16px;text-align:center;}
+  #img-preview img{max-height:280px;max-width:100%;border-radius:var(--radius-sm);box-shadow:var(--shadow);}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;border:none;transition:all .2s;}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-primary:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 4px 16px rgba(200,65,10,.35);}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+  .btn-secondary:hover{background:var(--border);}
+  .btn-success{background:var(--green);color:#fff;}
+  .btn-success:hover{background:#2e7d4a;}
+  .btn-danger{background:var(--red);color:#fff;}
+  .btn-danger:hover{background:#c53030;}
+  .btn-blue{background:var(--blue);color:#fff;}
+  .btn-blue:hover{background:#1d4ed8;}
+  .btn-warn{background:#d97706;color:#fff;}
+  .btn-warn:hover{background:#b45309;}
+  .btn-confirm{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-weight:700;box-shadow:0 2px 12px rgba(22,163,74,.3);}
+  .btn-confirm:hover{background:linear-gradient(135deg,#15803d,#166534);transform:translateY(-1px);}
+  .btn:disabled{opacity:.5;cursor:not-allowed!important;transform:none!important;box-shadow:none!important;}
+  .btn-sm{padding:7px 13px;font-size:13px;}
+
+  .loading{display:none;align-items:center;gap:12px;padding:20px;color:var(--text2);font-size:15px;justify-content:center;}
+  .loading.show{display:flex;}
+  .spinner{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-bottom:18px;}
+  .fg label{display:block;font-size:13px;font-weight:600;color:var(--text2);margin-bottom:5px;}
+  .fg input,.fg select,.fg textarea{width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:10px 13px;font-size:14px;font-family:inherit;color:var(--text);transition:border-color .2s;}
+  .fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:var(--accent);}
+  .fg textarea{resize:vertical;min-height:60px;}
+  .fg.full{grid-column:1/-1;}
+  .rs{color:var(--accent);}
+
+  .dept-grp{display:flex;gap:10px;flex-wrap:wrap;}
+  .dept-btn{padding:9px 20px;border-radius:20px;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;border:2px solid var(--border);background:var(--surface2);color:var(--text);transition:all .18s;}
+  .dept-btn:hover{border-color:var(--accent2);background:var(--accent-light);color:var(--accent);}
+  .dept-btn.active{border-color:var(--accent);background:var(--accent);color:#fff;}
+  .dept-btn-other{border-style:dashed;}
+  .dept-btn-other.active{border-style:solid;}
+
+  .mil{display:flex;flex-direction:column;gap:9px;}
+  .mir{display:grid;grid-template-columns:1fr 120px auto;gap:10px;align-items:center;padding:11px 14px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);}
+  .mir input{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 11px;font-size:14px;font-family:inherit;color:var(--text);width:100%;}
+  .mir input:focus{outline:none;border-color:var(--accent);}
+
+  .msg{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:11px;margin-bottom:18px;}
+  .msi{background:var(--surface2);border:2px solid var(--border);border-radius:var(--radius-sm);padding:13px 11px;text-align:center;cursor:pointer;transition:all .2s;}
+  .msi:hover{border-color:var(--accent2);background:var(--accent-light);}
+  .msi.selected{border-color:var(--accent);background:var(--accent-light);}
+  .msi .mn{font-size:13px;font-weight:600;margin-bottom:3px;}
+  .msi .mp{color:var(--accent);font-size:15px;font-weight:700;}
+  .qtyc{display:flex;align-items:center;gap:7px;justify-content:center;margin-top:7px;}
+  .qbtn{width:25px;height:25px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;font-family:inherit;transition:all .2s;color:var(--text);}
+  .qbtn:hover{border-color:var(--accent);color:var(--accent);}
+  .qnum{font-weight:700;font-size:14px;min-width:18px;text-align:center;}
+
+  .ot{width:100%;border-collapse:collapse;font-size:14px;}
+  .ot th{background:var(--text);color:#fff;padding:11px 13px;text-align:left;font-weight:600;font-size:13px;}
+  .ot th:first-child{border-radius:8px 0 0 0;}.ot th:last-child{border-radius:0 8px 0 0;}
+  .ot td{padding:10px 13px;border-bottom:1px solid var(--border);}
+  .ot tr:hover td{background:var(--surface2);}
+  .ot tr.gh td{background:var(--accent-light);font-weight:700;color:var(--accent);font-size:13px;}
+  .ot tr.tr td{background:var(--text);color:#fff;font-weight:700;}
+
+  .sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;margin-bottom:22px;}
+  .sc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;text-align:center;}
+  .sc .sl{font-size:13px;color:var(--text3);margin-bottom:5px;}
+  .sc .sv{font-size:28px;font-weight:900;color:var(--accent);}
+  .sc .su{font-size:13px;color:var(--text2);}
+
+  .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;}
+  .tdept{background:var(--blue-light);color:var(--blue);}
+  .topen{background:var(--green-light);color:var(--green);}
+  .tclosed{background:#fee2e2;color:var(--red);}
+
+  .alert{padding:13px 16px;border-radius:var(--radius-sm);font-size:14px;margin-bottom:15px;display:flex;align-items:flex-start;gap:10px;}
+  .ai{background:var(--blue-light);color:#1e40af;border-left:4px solid var(--blue);}
+  .as{background:var(--green-light);color:#166534;border-left:4px solid var(--green);}
+  .ad{background:#fee2e2;color:#991b1b;border-left:4px solid var(--red);}
+
+  .share-box{background:var(--blue-light);border:1.5px solid #93c5fd;border-radius:var(--radius-sm);padding:18px 20px;margin-bottom:20px;}
+  .share-box h4{font-size:14px;font-weight:700;color:#1e40af;margin-bottom:8px;}
+  .share-url-row{display:flex;gap:10px;align-items:center;margin-bottom:12px;}
+  .share-url-row input{flex:1;background:#fff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 13px;font-size:13px;font-family:monospace;color:#1e40af;}
+  .share-close-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .share-close-row span{font-size:12px;color:#1e40af;}
+
+  .oib{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 20px;margin-bottom:20px;display:none;gap:22px;flex-wrap:wrap;align-items:center;}
+  .oi{display:flex;flex-direction:column;gap:2px;}
+  .oil{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;}
+  .oiv{font-size:14px;font-weight:700;color:var(--text);}
+
+  #closed-banner{display:none;position:fixed;bottom:0;left:0;right:0;z-index:300;background:#991b1b;color:#fff;padding:14px 24px;align-items:center;gap:12px;justify-content:center;font-weight:700;font-size:15px;box-shadow:0 -4px 20px rgba(0,0,0,.25);}
+  #closed-banner.show{display:flex;}
+
+  .action-bar{display:flex;gap:11px;align-items:center;flex-wrap:wrap;margin-top:18px;}
+  .spacer{flex:1;}
+  .divider{border:none;border-top:1px dashed var(--border);margin:18px 0;}
+  .cop{background:var(--accent-light);border:1px solid #f9a87a;border-radius:var(--radius-sm);padding:13px 16px;margin-bottom:16px;font-size:14px;display:none;}
+  .cop strong{color:var(--accent);}
+  .empty-s{text-align:center;padding:48px 24px;color:var(--text3);}
+  .empty-s .ei{font-size:46px;margin-bottom:12px;}
+  .empty-s h3{font-size:17px;color:var(--text2);margin-bottom:6px;}
+
+  .mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;align-items:center;justify-content:center;}
+  .mo.show{display:flex;}
+  .md{background:var(--surface);border-radius:var(--radius);padding:30px 26px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:mdin .22s ease;}
+  @keyframes mdin{from{transform:scale(.94) translateY(10px);opacity:0}to{transform:none;opacity:1}}
+  .md h3{font-size:18px;font-weight:800;margin-bottom:10px;}
+  .md p{font-size:14px;color:var(--text2);margin-bottom:20px;line-height:1.6;}
+  .mda{display:flex;gap:10px;justify-content:flex-end;}
+
+  #toast{position:fixed;bottom:80px;right:24px;z-index:600;background:var(--text);color:#fff;padding:12px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;}
+
+  #success-overlay{display:none;position:fixed;inset:0;z-index:700;background:rgba(26,18,8,.7);align-items:center;justify-content:center;}
+  .suc-box{background:#fff;border-radius:var(--radius);padding:48px 40px;text-align:center;max-width:420px;width:90%;box-shadow:0 24px 80px rgba(0,0,0,.3);animation:mdin .3s ease;}
+
+  /* GAS setup banner */
+  .setup-banner{background:#fef9c3;border:2px solid #eab308;border-radius:var(--radius);padding:22px 26px;margin-bottom:22px;}
+  .setup-banner h3{font-size:15px;font-weight:800;color:#713f12;margin-bottom:10px;}
+  .setup-steps{counter-reset:step;display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
+  .setup-step{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:#713f12;line-height:1.5;}
+  .setup-step::before{counter-increment:step;content:counter(step);background:#eab308;color:#fff;border-radius:50%;width:20px;height:20px;min-width:20px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;}
+  .setup-input-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .setup-input-row input{flex:1;min-width:200px;background:#fff;border:1.5px solid #fcd34d;border-radius:8px;padding:10px 13px;font-size:13px;font-family:inherit;}
+
+  @media(max-width:640px){
+    main{padding:14px 12px;}
+    .form-grid{grid-template-columns:1fr 1fr;}
+    .ot{font-size:12px;}
+    .ot th,.ot td{padding:8px 9px;}
+    .suc-box{padding:32px 20px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🍱 <span>訂餐</span>系統</div>
+  <div id="hdr-info">
+    <div id="hdr-name"></div>
+    <div id="hdr-sub"></div>
+  </div>
+  <div id="hdr-status">
+    <span class="sbadge s-open" id="sbadge"><span class="sdot"></span> 訂單開放中</span>
+  </div>
+</header>
+
+<div class="steps">
+  <div class="stab active" id="tab-1" onclick="nav(1)"><span class="sn">1</span> 訂單設定</div>
+  <div class="stab" id="tab-2" onclick="nav(2)"><span class="sn">2</span> 上傳菜單</div>
+  <div class="stab" id="tab-4" onclick="nav(4)"><span class="sn">3</span> 填寫訂單</div>
+  <div class="stab" id="tab-5" onclick="nav(5)"><span class="sn">4</span> 統計總覽</div>
+</div>
+
+<main>
+
+<!-- ══ STEP 1 ══ -->
+<div class="panel active" id="p-1">
+
+  <!-- GAS URL setup banner (hidden once configured) -->
+  <div class="setup-banner" id="setup-banner">
+    <h3>⚙️ 第一次使用：設定後端服務（5 分鐘完成，只需做一次）</h3>
+    <div class="setup-steps">
+      <div class="setup-step">前往 <a href="https://script.google.com" target="_blank" style="color:#b45309;font-weight:700;">script.google.com</a>，用 Google 帳號登入，點「新增專案」</div>
+      <div class="setup-step">把下載的 <strong>訂餐系統後端_貼入AppScript.gs</strong> 內容全部複製，貼入編輯器（取代原本所有內容）</div>
+      <div class="setup-step">點上方「部署」→「新增部署作業」→ 類型選「網路應用程式」→ 執行身分選「我」→ 誰可以存取選「所有人」→ 點「部署」</div>
+      <div class="setup-step">複製產生的「網路應用程式網址」，貼入下方並儲存</div>
+    </div>
+    <div class="setup-input-row">
+      <input id="gas-url-input" placeholder="貼入網路應用程式網址 https://script.google.com/macros/s/…/exec">
+      <button class="btn btn-warn btn-sm" onclick="saveGasUrl()">✅ 儲存並開始使用</button>
+    </div>
+    <p id="gas-err" style="color:var(--red);font-size:13px;margin-top:8px;display:none;"></p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📋 建立訂單資訊</div>
+    <p style="color:var(--text3);font-size:14px;margin-bottom:22px;">設定本次訂餐的基本資料，完成菜單後自動產生共享連結</p>
+    <div class="form-grid">
+      <div class="fg"><label>訂單名稱 <span class="rs">*</span></label><input id="o-name" placeholder="例：12月午餐團購"></div>
+      <div class="fg"><label>餐廳名稱 <span class="rs">*</span></label><input id="o-restaurant" placeholder="例：好吃便當店"></div>
+      <div class="fg"><label>訂餐日期 <span class="rs">*</span></label><input type="date" id="o-date"></div>
+      <div class="fg"><label>截止時間</label><input type="time" id="o-deadline"></div>
+      <div class="fg full"><label>備註說明</label><input id="o-desc" placeholder="例：預計 12:00 送達，有問題請找王小明"></div>
+    </div>
+    <div class="alert ai"><span>🔑</span><div>你將成為此訂單的<strong>開單者</strong>，擁有關閉訂單的專屬權限。菜單確認後自動產生共享連結。</div></div>
+  </div>
+  <div class="action-bar"><div class="spacer"></div><button class="btn btn-primary" onclick="saveInfo()">建立訂單，設定菜單 →</button></div>
+
+  <!-- Join existing order -->
+  <div class="card" style="border:2px dashed var(--blue);background:var(--blue-light);">
+    <div class="card-title" style="color:var(--blue);">🔗 加入現有訂單</div>
+    <p style="color:#1e40af;font-size:14px;margin-bottom:16px;">收到同事傳來的<strong>訂單代碼</strong>？在此輸入即可直接進入填寫畫面。</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <input id="join-code" placeholder="輸入訂單代碼（ord_…）"
+        style="flex:1;min-width:180px;background:#fff;border:1.5px solid #93c5fd;border-radius:8px;padding:11px 14px;font-size:14px;font-family:monospace;color:#1e40af;"
+        onkeydown="if(event.key==='Enter')joinOrder()">
+      <button class="btn btn-blue" onclick="joinOrder()">進入填寫訂單 →</button>
+    </div>
+    <p id="join-err" style="color:var(--red);font-size:13px;margin-top:10px;display:none;"></p>
+  </div>
+</div>
+
+<!-- ══ STEP 2 ══ -->
+<div class="panel" id="p-2">
+  <div class="oib" id="oib-2"></div>
+
+  <div class="card">
+    <div class="card-title">📄 上傳菜單</div>
+    <p style="color:var(--text3);font-size:14px;margin-bottom:16px;">支援 Word 檔案、圖片或 PDF，AI 自動辨識所有餐點與價格</p>
+
+    <div class="upload-zone" id="word-zone" onclick="document.getElementById('menu-fi').click()" ondragover="wordDrag(event,1)" ondragleave="wordDrag(event,0)" ondrop="wordDrop(event)">
+      <div class="ui">📋</div>
+      <h3>點擊或拖曳上傳菜單</h3>
+      <p>支援 .docx、JPG、PNG、PDF 格式</p>
+      <input type="file" id="menu-fi" accept=".docx,image/*,.pdf" onchange="onMenuFile(event)">
+    </div>
+    <div class="loading" id="loading-word"><div class="spinner"></div><span>AI 正在辨識菜單，請稍候...</span></div>
+    <div id="word-result" style="display:none;" class="alert as">
+      <span>✅</span><span id="word-result-msg"></span>
+    </div>
+    <div id="word-err" style="display:none;" class="alert ad">
+      <span>⚠️</span><span id="word-err-msg"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">✏️ 手動輸入 / 確認餐點</div>
+    <p style="color:var(--text3);font-size:14px;margin-bottom:18px;">上傳後可在此確認修改，也可以直接手動輸入</p>
+    <div class="mil" id="menu-list"></div>
+    <div class="action-bar" style="margin-top:14px;">
+      <button class="btn btn-secondary btn-sm" onclick="addItem()">＋ 新增餐點</button>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <button class="btn btn-secondary" onclick="nav(1)">← 返回</button>
+    <div class="spacer"></div>
+    <button class="btn btn-primary" id="btn-confirm-menu" onclick="confirmMenu()">確認菜單，開始訂餐 →</button>
+  </div>
+</div>
+
+<!-- ══ STEP 3 placeholder ══ -->
+<div class="panel" id="p-3"></div>
+
+<!-- ══ STEP 4 ══ -->
+<div class="panel" id="p-4">
+  <div class="oib" id="oib-4"></div>
+
+  <!-- Owner: share link + close button -->
+  <div class="share-box" id="owner-box" style="display:none;">
+    <h4>🔗 共享訂單連結</h4>
+    <p style="font-size:13px;color:#1e3a8a;margin-bottom:10px;">
+      把以下連結傳給同事，他們直接開啟即可填寫訂單（任何裝置、任何瀏覽器皆可）
+    </p>
+    <div class="share-url-row">
+      <input id="share-link" readonly>
+      <button class="btn btn-blue btn-sm" onclick="copyLink()">📋 複製連結</button>
+    </div>
+    <div class="share-close-row">
+      <button class="btn btn-warn btn-sm" id="btn-close" onclick="askClose()">🔒 關閉訂單</button>
+      <span id="close-hint">關閉後所有人將無法再新增訂單</span>
+    </div>
+  </div>
+
+  <div class="alert ad" id="closed-notice" style="display:none;">🔒 此訂單已關閉，無法再新增訂單。</div>
+
+  <!-- Order form -->
+  <div id="order-form">
+    <div class="card">
+      <div class="card-title">✍️ 填寫訂單</div>
+      <div class="fg" style="margin-bottom:16px;">
+        <label>組室 <span class="rs">*</span></label>
+        <div class="dept-grp" id="dept-grp"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center;" id="dept-add-row">
+          <input id="dept-new-input" placeholder="輸入新組室名稱後按＋新增"
+            style="flex:1;background:var(--surface);border:1.5px dashed var(--border);border-radius:8px;padding:9px 13px;font-size:14px;font-family:inherit;"
+            onkeydown="if(event.key==='Enter')addDept()">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addDept()">＋ 新增組室</button>
+        </div>
+        <input type="hidden" id="f-dept">
+      </div>
+      <div class="form-grid" style="margin-bottom:0;">
+        <div class="fg"><label>職稱</label><input id="f-title" placeholder="例：組長、專員"></div>
+        <div class="fg"><label>姓名 <span class="rs">*</span></label><input id="f-name" placeholder="請輸入姓名"></div>
+      </div>
+      <hr class="divider">
+      <p style="font-size:14px;font-weight:600;margin-bottom:13px;color:var(--text2);">選擇餐點（可多選）</p>
+      <div class="msg" id="menu-sel"></div>
+      <div class="fg full" style="margin-bottom:14px;"><label>備註</label><textarea id="f-note" placeholder="例：不要辣、去冰..."></textarea></div>
+      <div class="cop" id="order-preview"></div>
+      <div class="action-bar">
+        <button class="btn btn-secondary" onclick="clearForm()">🗑️ 清除</button>
+        <div class="spacer"></div>
+        <button class="btn btn-success" id="btn-add" onclick="addOrder()">✅ 加入訂單</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📋 目前訂單
+      <span id="cnt" style="margin-left:auto;background:var(--accent);color:#fff;padding:2px 12px;border-radius:20px;font-size:13px;">0 筆</span>
+    </div>
+    <div id="orders-list"></div>
+  </div>
+
+  <div class="action-bar">
+    <button class="btn btn-secondary no-print" id="btn-back3" onclick="nav(2)">← 修改菜單</button>
+    <div class="spacer"></div>
+    <button class="btn btn-primary" onclick="nav(5)">查看統計總覽 →</button>
+  </div>
+</div>
+
+<!-- ══ STEP 5 ══ -->
+<div class="panel" id="p-summary">
+  <div id="summary"></div>
+  <div class="action-bar no-print">
+    <button class="btn btn-secondary" onclick="nav(4)">← 繼續新增訂單</button>
+    <div class="spacer"></div>
+    <button class="btn btn-confirm" id="btn-confirm-order" onclick="openConfirm()">📨 確認訂單</button>
+  </div>
+</div>
+
+</main>
+
+<div id="closed-banner">🔒 此訂單已關閉，無法再新增餐點</div>
+
+<!-- Modals -->
+<div class="mo" id="mo-close">
+  <div class="md">
+    <h3>🔒 確定要關閉訂單？</h3>
+    <p>關閉後所有人<strong>無法再新增或修改</strong>訂單，可之後重新開放。</p>
+    <div class="mda"><button class="btn btn-secondary" onclick="hideMo('mo-close')">取消</button><button class="btn btn-danger" onclick="doClose()">確定關閉</button></div>
+  </div>
+</div>
+
+<div class="mo" id="mo-confirm">
+  <div class="md" style="max-width:560px;">
+    <h3>📨 確認送出訂單？</h3>
+    <p>請確認以下內容無誤，送出後完成本次訂餐彙整。</p>
+    <div id="confirm-body" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px 18px;margin-bottom:20px;max-height:280px;overflow-y:auto;font-size:13px;"></div>
+    <div class="mda">
+      <button class="btn btn-secondary" onclick="hideMo('mo-confirm')">否，繼續檢視</button>
+      <button class="btn btn-confirm" onclick="doSubmit()">是，確認送出 →</button>
+    </div>
+  </div>
+</div>
+
+<div id="success-overlay">
+  <div class="suc-box">
+    <div style="font-size:64px;margin-bottom:16px;">✅</div>
+    <h2 style="font-size:22px;font-weight:900;margin-bottom:10px;">訂單已送出！</h2>
+    <p style="font-size:14px;color:var(--text2);line-height:1.7;margin-bottom:8px;">本次訂餐已成功彙整完成。</p>
+    <div id="suc-line" style="background:var(--accent-light);border-radius:var(--radius-sm);padding:14px 18px;margin:18px 0;font-size:14px;font-weight:700;color:var(--accent);"></div>
+    <button onclick="document.getElementById('success-overlay').style.display='none';" style="margin-top:8px;background:none;border:none;font-size:13px;color:var(--text3);cursor:pointer;font-family:inherit;">關閉</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// Config
+// ══════════════════════════════════════════
+// GAS_URL 會從 localStorage 讀取（使用者設定後自動儲存）
+let GAS_URL = localStorage.getItem('gas_url') || 'https://script.google.com/macros/s/AKfycbz_8OeiZ4XTBOmjLGjCR_QfakbZBsfqEadgvx3xULO3tOLAbwmcIotpjxRHfYC2T45Z/exec';
+
+// ══════════════════════════════════════════
+// State
+// ══════════════════════════════════════════
+let orderInfo = {}, menuItems = [], orders = [];
+let selItems = {}, editingIdx = -1;
+let isOwner = false, isClosed = false, orderKey = null;
+let pollTimer = null;
+
+// ══════════════════════════════════════════
+// Init
+// ══════════════════════════════════════════
+(function init() {
+  document.getElementById('setup-banner').style.display = 'none';
+  document.getElementById('o-date').value = new Date().toISOString().slice(0,10);
+  if (GAS_URL) {
+    document.getElementById('setup-banner').style.display = 'none';
+    document.getElementById('gas-url-input').value = GAS_URL;
+  }
+  // Check URL param ?order=
+  const key = new URLSearchParams(location.search).get('order');
+  if (key) loadOrderByKey(key);
+})();
+
+// ══════════════════════════════════════════
+// GAS URL setup
+// ══════════════════════════════════════════
+async function saveGasUrl() {
+  const url = document.getElementById('gas-url-input').value.trim();
+  const errEl = document.getElementById('gas-err');
+  if (!url || !url.includes('script.google.com')) {
+    errEl.textContent = '⚠️ 請貼入正確的 Google Apps Script 網址'; errEl.style.display=''; return;
+  }
+  const btn = document.querySelector('.setup-banner button');
+  btn.disabled=true; btn.textContent='驗證中...';
   try {
-    const body   = e.postData ? JSON.parse(e.postData.contents) : {};
-    const action = e.parameter.action || body.action || '';
- 
-    let result;
-    if      (action === 'ping')             result = { ok: true };
-    else if (action === 'create')           result = createOrder(body);
-    else if (action === 'read')             result = readOrder(e.parameter.key || body.key);
-    else if (action === 'update')           result = updateOrder(body);
-    else if (action === 'parseMenu')        result = parseMenuWithAI(body);
-    else if (action === 'parseMenuImage')   result = parseMenuWithImage(body);
-    else                                    result = { ok: false, error: 'Unknown action: ' + action };
- 
-    return out(result);
-  } catch(err) {
-    return out({ ok: false, error: err.message });
+    const r = await gasCall('ping', {});
+    if (!r.ok) throw new Error(r.error || '連線失敗');
+    GAS_URL = url;
+    localStorage.setItem('gas_url', GAS_URL);
+    document.getElementById('setup-banner').style.display='none';
+    toast('✅ 後端設定成功！可以開始使用了。');
+  } catch(e) {
+    errEl.textContent='⚠️ 無法連線，請確認網址是否正確且已部署為「所有人可存取」。錯誤：'+e.message;
+    errEl.style.display='';
+    btn.disabled=false; btn.textContent='✅ 儲存並開始使用';
   }
 }
- 
-function out(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
- 
-function store() {
-  return PropertiesService.getScriptProperties();
-}
- 
-// ── 建立新訂單 ──
-function createOrder(body) {
-  const key  = 'ord_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-  const data = JSON.stringify({
-    orderInfo: body.orderInfo || {},
-    menuItems: body.menuItems || [],
-    orders:    [],
-    isClosed:  false
+
+// ══════════════════════════════════════════
+// GAS API helper
+// ══════════════════════════════════════════
+async function gasCall(action, body) {
+  if (!GAS_URL) throw new Error('尚未設定後端服務，請先完成上方設定步驟');
+  const url = GAS_URL + '?action=' + action;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // avoid preflight CORS
+    body: JSON.stringify({ action, ...body })
   });
-  store().setProperty(key, data);
-  return { ok: true, key: key };
+  return resp.json();
 }
- 
-// ── 讀取訂單 ──
-function readOrder(key) {
-  if (!key) return { ok: false, error: '缺少 key' };
-  const raw = store().getProperty(key);
-  if (!raw)  return { ok: false, error: '找不到此訂單' };
-  return { ok: true, data: JSON.parse(raw) };
+
+async function apiCreate() {
+  const r = await gasCall('create', { orderInfo, menuItems });
+  if (!r.ok) throw new Error(r.error);
+  return r.key;
 }
- 
-// ── 更新訂單 ──
-function updateOrder(body) {
-  const key = body.key;
-  if (!key) return { ok: false, error: '缺少 key' };
-  if (!store().getProperty(key)) return { ok: false, error: '找不到此訂單' };
-  store().setProperty(key, JSON.stringify(body.data));
-  return { ok: true };
+async function apiRead(key) {
+  const r = await gasCall('read', { key });
+  if (!r.ok) throw new Error(r.error);
+  return r.data;
 }
- 
-// ── Gemini AI 辨識菜單（文字）──
-function parseMenuWithAI(body) {
-  const text = body.text || '';
-  if (!text) return { ok: false, error: '沒有收到菜單內容' };
- 
-  const prompt = `以下是從菜單文件中擷取的文字內容，請找出所有餐點名稱和對應的價格。
-只回傳 JSON 格式，不要任何說明：{"items":[{"name":"餐點名稱","price":數字},...]}
-價格只取數字（不含$符號）。如果一個餐點有多種價格，取第一個價格。
-忽略類別標題、備註、熱量等非餐點資訊。
- 
-菜單內容：
-${text}`;
- 
+async function apiUpdate() {
+  if (!orderKey) return;
+  await gasCall('update', { key: orderKey, data: { orderInfo, menuItems, orders, isClosed } });
+}
+
+// ══════════════════════════════════════════
+// Navigation
+// ══════════════════════════════════════════
+function nav(n) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active'));
+  const pid = n===5 ? 'p-summary' : 'p-'+n;
+  document.getElementById(pid).classList.add('active');
+  document.getElementById('tab-'+(n===5?5:n))?.classList.add('active');
+  if (n===5) renderSummary();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ══════════════════════════════════════════
+// Step 1 — Save info
+// ══════════════════════════════════════════
+function saveInfo() {
+  if (!GAS_URL) { alert('請先完成上方的後端服務設定！'); return; }
+  const name=v('o-name'), rest=v('o-restaurant'), date=v('o-date');
+  if (!name){alert('請輸入訂單名稱！');return;}
+  if (!rest){alert('請輸入餐廳名稱！');return;}
+  if (!date){alert('請選擇日期！');return;}
+  orderInfo={name,restaurant:rest,date,deadline:v('o-deadline'),desc:v('o-desc')};
+  isOwner=true;
+  updateHeader(); document.getElementById('hdr-status').style.display='';
+  renderOIBs();
+  renderMenuEditor();
+  nav(2);
+}
+
+// ══════════════════════════════════════════
+// Step 1 — Join existing order
+// ══════════════════════════════════════════
+async function joinOrder() {
+  if (!GAS_URL) { showJoinErr('請先完成上方的後端服務設定！'); return; }
+  const code = document.getElementById('join-code').value.trim();
+  if (!code) { showJoinErr('請輸入訂單代碼'); return; }
+  document.getElementById('join-err').style.display='none';
+  const btn = document.querySelector('#p-1 .btn-blue');
+  btn.disabled=true; btn.textContent='載入中...';
   try {
-    const response = UrlFetchApp.fetch(GEMINI_URL, {
-      method: 'POST',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
-      })
-    });
-    const result = JSON.parse(response.getContentText());
-    const raw = result.candidates[0].content.parts[0].text;
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
-    return { ok: true, items: parsed.items || [] };
+    const data = await apiRead(code);
+    orderKey=code; isOwner=false;
+    orderInfo=data.orderInfo||{}; menuItems=data.menuItems||[];
+    orders=data.orders||[]; isClosed=data.isClosed||false;
+    updateHeader(); updateBadge(); renderOIBs();
+    nav(4); renderSelGrid(); renderOrdersList(); renderDeptBtns(); applyClosedUI();
+    document.getElementById('owner-box').style.display='none';
+    document.getElementById('btn-back3').style.display='none';
+    startPolling();
   } catch(e) {
-    return { ok: false, error: 'AI 辨識失敗：' + e.message };
+    showJoinErr('找不到此訂單，請確認代碼是否正確');
+  } finally {
+    btn.disabled=false; btn.textContent='進入填寫訂單 →';
   }
 }
- 
-// ── Gemini AI 辨識菜單（圖片/PDF）──
-function parseMenuWithImage(body) {
-  const base64 = body.base64 || '';
-  const mimeType = body.mimeType || 'image/jpeg';
-  if (!base64) return { ok: false, error: '沒有收到圖片內容' };
- 
-  const prompt = `這是一份菜單的圖片或PDF，請找出所有餐點名稱和對應的價格。
-只回傳 JSON 格式，不要任何說明：{"items":[{"name":"餐點名稱","price":數字},...]}
-價格只取數字（不含$符號）。如果一個餐點有多種價格，取第一個價格。
-忽略類別標題、備註、熱量等非餐點資訊。`;
- 
+
+async function loadOrderByKey(key) {
   try {
-    const response = UrlFetchApp.fetch(GEMINI_URL, {
-      method: 'POST',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        contents: [{
-          parts: [
-            { inline_data: { mime_type: mimeType, data: base64 } },
-            { text: prompt }
-          ]
-        }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
-      })
-    });
-    const result = JSON.parse(response.getContentText());
-    const raw = result.candidates[0].content.parts[0].text;
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
-    return { ok: true, items: parsed.items || [] };
+    const data = await apiRead(key);
+    orderKey=key; isOwner=false;
+    orderInfo=data.orderInfo||{}; menuItems=data.menuItems||[];
+    orders=data.orders||[]; isClosed=data.isClosed||false;
+    updateHeader(); updateBadge(); renderOIBs();
+    nav(4); renderSelGrid(); renderOrdersList(); renderDeptBtns(); applyClosedUI();
+    document.getElementById('owner-box').style.display='none';
+    document.getElementById('btn-back3').style.display='none';
+    startPolling();
   } catch(e) {
-    return { ok: false, error: 'AI 辨識失敗：' + e.message };
+    // fail silently, stay on step 1
   }
 }
+
+function showJoinErr(m){const e=document.getElementById('join-err');e.textContent='⚠️ '+m;e.style.display='';}
+function startPolling(){
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(async()=>{
+    try{
+      const d=await apiRead(orderKey);
+      orders=d.orders||[]; isClosed=d.isClosed||false;
+      if(d.orderInfo) orderInfo=d.orderInfo;
+      renderOrdersList(); renderDeptBtns(); applyClosedUI(); updateBadge(); renderOIBs();
+    }catch(e){}
+  },12000);
+}
+
+// ══════════════════════════════════════════
+// Step 2 — Upload & AI
+// ══════════════════════════════════════════
+let upFile=null,upB64=null;
+function doDrag(e,on){e.preventDefault();document.getElementById('upzone').classList.toggle('drag-over',!!on);}
+function doDrop(e){e.preventDefault();doDrag(e,0);if(e.dataTransfer.files[0])procFile(e.dataTransfer.files[0]);}
+function onFile(e){if(e.target.files[0])procFile(e.target.files[0]);}
+function procFile(f){
+  upFile=f;
+  const r=new FileReader();
+  r.onload=e=>{
+    upB64=e.target.result.split(',')[1];
+    if(f.type.startsWith('image/')){const i=document.getElementById('prev-img');i.src=e.target.result;i.style.display='';document.getElementById('img-preview').style.display='block';}
+    else{document.getElementById('img-preview').style.display='block';document.getElementById('img-preview').innerHTML=`<p style="font-size:40px;">📄</p><p style="color:var(--text2);font-size:14px;font-weight:600;margin-top:8px;">${esc(f.name)}</p>`;}
+    document.getElementById('btn-ai').disabled=false;
+  };
+  r.readAsDataURL(f);
+}
+async function doAI(){
+  if(!upFile)return;
+  document.getElementById('loading-ai').classList.add('show');
+  document.getElementById('btn-ai').disabled=true;
+  const isImg=upFile.type.startsWith('image/');
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[
+        {type:isImg?'image':'document',source:{type:'base64',media_type:isImg?upFile.type:'application/pdf',data:upB64}},
+        {type:'text',text:'請仔細分析這份菜單，提取所有餐點名稱與對應價格。只回傳JSON，不要任何說明或markdown：{"items":[{"name":"餐點名稱","price":數字},...]}'}
+      ]}]})
+    });
+    const data=await resp.json();
+    const txt=(data.content||[]).map(b=>b.text||'').join('');
+    menuItems=JSON.parse(txt.replace(/```json|```/g,'').trim()).items||[];
+    nav(3); renderMenuEditor();
+  }catch(err){alert('AI 辨識失敗，請手動輸入。\n'+err.message);nav(3);renderMenuEditor();}
+  finally{document.getElementById('loading-ai').classList.remove('show');document.getElementById('btn-ai').disabled=false;}
+}
+
+// ══════════════════════════════════════════
+// Step 2 — Menu upload (Word / Image / PDF)
+// ══════════════════════════════════════════
+function wordDrag(e,on){e.preventDefault();document.getElementById('word-zone').classList.toggle('drag-over',!!on);}
+function wordDrop(e){e.preventDefault();wordDrag(e,0);if(e.dataTransfer.files[0])processMenuFile(e.dataTransfer.files[0]);}
+function onMenuFile(e){if(e.target.files[0])processMenuFile(e.target.files[0]);}
+
+function processMenuFile(file) {
+  document.getElementById('loading-word').classList.add('show');
+  document.getElementById('word-result').style.display = 'none';
+  document.getElementById('word-err').style.display = 'none';
+
+  if (file.name.endsWith('.docx')) {
+    // Word: extract text with mammoth, then send to Gemini via GAS
+    const reader = new FileReader();
+    reader.onload = async e => {
+      try {
+        const result = await mammoth.extractRawText({ arrayBuffer: e.target.result });
+        const text = result.value.trim();
+        if (!text) { showWordErr('檔案內容為空'); return; }
+        const r = await gasCall('parseMenu', { text });
+        handleAIResult(r);
+      } catch(err) {
+        showWordErr('讀取失敗：' + err.message);
+      } finally {
+        document.getElementById('loading-word').classList.remove('show');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    // Image / PDF: send base64 directly to Gemini via GAS
+    const reader = new FileReader();
+    reader.onload = async e => {
+      try {
+        const base64 = e.target.result.split(',')[1];
+        const r = await gasCall('parseMenuImage', { base64, mimeType: file.type });
+        handleAIResult(r);
+      } catch(err) {
+        showWordErr('讀取失敗：' + err.message);
+      } finally {
+        document.getElementById('loading-word').classList.remove('show');
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
+function handleAIResult(r) {
+  if (!r.ok) { showWordErr('AI 辨識失敗：' + r.error); return; }
+  if (!r.items || r.items.length === 0) { showWordErr('無法辨識餐點，請改用手動輸入'); return; }
+  menuItems = r.items;
+  renderMenuEditor();
+  document.getElementById('word-result').style.display = 'flex';
+  document.getElementById('word-result-msg').textContent = `AI 成功辨識 ${r.items.length} 個餐點，請在下方確認是否正確`;
+}
+
+function showWordErr(msg) {
+  document.getElementById('word-err').style.display = 'flex';
+  document.getElementById('word-err-msg').textContent = msg;
+  document.getElementById('loading-word').classList.remove('show');
+}
+
+
+function renderMenuEditor(){
+  const el=document.getElementById('menu-list');
+  if(!menuItems.length){el.innerHTML='<p style="color:var(--text3);font-size:14px;text-align:center;padding:20px;">尚無餐點，請點選「新增餐點」</p>';return;}
+  el.innerHTML=menuItems.map((it,i)=>`
+    <div class="mir">
+      <input type="text" value="${esc(it.name)}" placeholder="餐點名稱" oninput="menuItems[${i}].name=this.value">
+      <input type="number" value="${it.price}" placeholder="價格" min="0" style="text-align:right" oninput="menuItems[${i}].price=Number(this.value)||0">
+      <button class="btn btn-danger btn-sm" onclick="delItem(${i})">✕</button>
+    </div>`).join('');
+}
+function addItem(){menuItems.push({name:'',price:0});renderMenuEditor();setTimeout(()=>{const ins=document.querySelectorAll('.mir input[type=text]');ins[ins.length-1]?.focus();},50);}
+function delItem(i){menuItems.splice(i,1);renderMenuEditor();}
+
+async function confirmMenu(){
+  menuItems=menuItems.filter(m=>m.name.trim());
+  if(!menuItems.length){alert('請至少輸入一個餐點！');return;}
+  const btn=document.getElementById('btn-confirm-menu');
+  btn.disabled=true; btn.textContent='建立中...';
+  try{
+    orderKey=await apiCreate();
+  }catch(e){
+    alert('❌ 建立訂單失敗：'+e.message);
+    btn.disabled=false; btn.textContent='確認菜單，開始訂餐 →'; return;
+  }
+  btn.disabled=false; btn.textContent='確認菜單，開始訂餐 →';
+  nav(4); renderSelGrid(); renderOrdersList(); renderDeptBtns();
+  if(isOwner) setupOwnerBox();
+}
+
+// ══════════════════════════════════════════
+// Step 4 — Owner box (share link)
+// ══════════════════════════════════════════
+function setupOwnerBox(){
+  document.getElementById('owner-box').style.display='';
+  // Build a proper shareable URL using the current page URL + ?order=key
+  const base = location.href.split('?')[0];
+  const shareUrl = base + '?order=' + encodeURIComponent(orderKey);
+  document.getElementById('share-link').value = shareUrl;
+}
+
+function copyLink(){
+  const val=document.getElementById('share-link').value;
+  navigator.clipboard.writeText(val).then(()=>toast('✅ 連結已複製！')).catch(()=>{document.getElementById('share-link').select();document.execCommand('copy');toast('✅ 連結已複製！');});
+}
+
+// ══════════════════════════════════════════
+// Dept selector — dynamic, shared across order
+// ══════════════════════════════════════════
+function renderDeptBtns() {
+  const grp = document.getElementById('dept-grp');
+  if (!grp) return;
+  const depts = orderInfo.depts || [];
+  grp.innerHTML = depts.map(d => `
+    <button type="button" class="dept-btn ${document.getElementById('f-dept')?.value===d?'active':''}"
+      onclick="pickDept('${esc(d)}')">${esc(d)}</button>
+  `).join('');
+  if (!depts.length) {
+    grp.innerHTML = '<p style="color:var(--text3);font-size:13px;">尚無組室，請在下方新增</p>';
+  }
+}
+
+function pickDept(val) {
+  document.querySelectorAll('.dept-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.dept-btn').forEach(b=>{if(b.textContent.trim()===val)b.classList.add('active');});
+  document.getElementById('f-dept').value = val;
+}
+
+async function addDept() {
+  const input = document.getElementById('dept-new-input');
+  const name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  if ((orderInfo.depts||[]).includes(name)) { alert('此組室已存在！'); return; }
+  // Add to orderInfo and save
+  if (!orderInfo.depts) orderInfo.depts = [];
+  orderInfo.depts.push(name);
+  await apiUpdate();
+  input.value = '';
+  renderDeptBtns();
+  // Auto-select the newly added dept
+  pickDept(name);
+  toast('✅ 已新增組室：' + name);
+}
+
+// ══════════════════════════════════════════
+// Menu select grid
+// ══════════════════════════════════════════
+function renderSelGrid(){
+  const g=document.getElementById('menu-sel');if(!g)return;
+  g.innerHTML=menuItems.map((it,i)=>`
+    <div class="msi" id="msi-${i}" onclick="toggleMsi(${i})">
+      <div class="mn">${esc(it.name)}</div>
+      <div class="mp">$${it.price}</div>
+      <div class="qtyc">
+        <button class="qbtn" onclick="event.stopPropagation();chgQty(${i},-1)">−</button>
+        <span class="qnum" id="q-${i}">0</span>
+        <button class="qbtn" onclick="event.stopPropagation();chgQty(${i},1)">＋</button>
+      </div>
+    </div>`).join('');
+}
+function toggleMsi(i){if(isClosed)return;if(selItems[i])delete selItems[i];else selItems[i]=1;updMsi(i);updPreview();}
+function chgQty(i,d){if(isClosed)return;const n=Math.max(0,(selItems[i]||0)+d);if(!n)delete selItems[i];else selItems[i]=n;updMsi(i);updPreview();}
+function updMsi(i){const el=document.getElementById('msi-'+i);if(!el)return;const q=selItems[i]||0;document.getElementById('q-'+i).textContent=q;el.classList.toggle('selected',q>0);}
+function updPreview(){
+  const div=document.getElementById('order-preview');
+  const ents=Object.entries(selItems).filter(([,q])=>q>0);
+  if(!ents.length){div.style.display='none';return;}
+  let tot=0;
+  const lines=ents.map(([i,q])=>{const it=menuItems[i];tot+=it.price*q;return `${it.name}×${q}=$${it.price*q}`;}).join('　|　');
+  div.style.display='block';
+  div.innerHTML=`<strong>已選：</strong>${lines}　　<strong>小計：$${tot}</strong>`;
+}
+
+// ══════════════════════════════════════════
+// Add / Edit / Delete order
+// ══════════════════════════════════════════
+async function addOrder(){
+  if(isClosed){alert('此訂單已關閉。');return;}
+  // Re-sync first to avoid overwriting others' orders
+  try{const d=await apiRead(orderKey);orders=d.orders||orders;isClosed=d.isClosed||isClosed;}catch(e){}
+  const dept=document.getElementById('f-dept').value.trim();
+  const name=v('f-name');
+  if(!dept){alert('請選擇或填寫組室！');return;}
+  if(!name){alert('請填寫姓名！');document.getElementById('f-name').focus();return;}
+  const ents=Object.entries(selItems).filter(([,q])=>q>0);
+  if(!ents.length){alert('請至少選擇一項餐點！');return;}
+  const items=ents.map(([i,q])=>({name:menuItems[i].name,price:menuItems[i].price,qty:q}));
+  const total=items.reduce((s,it)=>s+it.price*it.qty,0);
+  const rec={dept,title:v('f-title'),name,items,note:v('f-note'),total,at:new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})};
+  if(editingIdx>=0){orders[editingIdx]=rec;editingIdx=-1;}else orders.push(rec);
+  await apiUpdate();
+  clearForm(); renderOrdersList();
+}
+function clearForm(){
+  ['f-dept','f-title','f-name','f-note'].forEach(id=>document.getElementById(id).value='');
+  document.querySelectorAll('.dept-btn').forEach(b=>b.classList.remove('active'));
+  selItems={}; renderSelGrid(); updPreview();
+  editingIdx=-1;
+  const btn=document.getElementById('btn-add');
+  if(btn){btn.textContent='✅ 加入訂單';btn.className='btn btn-success';}
+  renderOrdersList();
+}
+function editOrder(i){
+  const o=orders[i]; editingIdx=i;
+  document.getElementById('order-form').scrollIntoView({behavior:'smooth',block:'start'});
+  // Restore dept selection
+  document.getElementById('f-dept').value = o.dept||'';
+  renderDeptBtns();
+  // Re-highlight the selected dept btn
+  document.querySelectorAll('.dept-btn').forEach(b=>{
+    b.classList.toggle('active', b.textContent.trim()===o.dept);
+  });
+  document.getElementById('f-title').value=o.title||'';
+  document.getElementById('f-name').value=o.name||'';
+  document.getElementById('f-note').value=o.note||'';
+  selItems={};
+  o.items.forEach(oi2=>{const idx=menuItems.findIndex(m=>m.name===oi2.name);if(idx>=0)selItems[idx]=oi2.qty;});
+  renderSelGrid();Object.keys(selItems).forEach(k=>updMsi(Number(k)));updPreview();
+  const btn=document.getElementById('btn-add');btn.textContent='💾 儲存修改';btn.className='btn btn-primary';
+  renderOrdersList();
+}
+async function removeOrder(i){
+  if(!confirm('確定要刪除這筆訂單？'))return;
+  try{const d=await apiRead(orderKey);orders=d.orders||orders;}catch(e){}
+  orders.splice(i,1);
+  if(editingIdx===i){clearForm();editingIdx=-1;}else if(editingIdx>i)editingIdx--;
+  await apiUpdate(); renderOrdersList();
+}
+function renderOrdersList(){
+  const div=document.getElementById('orders-list');if(!div)return;
+  if(!orders.length){
+    div.innerHTML='<div class="empty-s"><div class="ei">📭</div><h3>尚無訂單</h3><p>填寫上方表單並點選「加入訂單」</p></div>';
+    document.getElementById('cnt').textContent='0 筆';return;
+  }
+  div.innerHTML=`<table class="ot"><thead><tr><th>#</th><th>組室</th><th>職稱</th><th>姓名</th><th>餐點</th><th style="text-align:right">金額</th><th>備註</th><th></th></tr></thead>
+  <tbody>${orders.map((o,i)=>`<tr ${editingIdx===i?'style="background:#fef9c3"':''}>
+    <td>${i+1}</td><td><span class="tag tdept">${esc(o.dept)}</span></td>
+    <td>${esc(o.title)}</td><td>${esc(o.name)}</td>
+    <td>${o.items.map(it=>it.name+(it.qty>1?'×'+it.qty:'')).join('、')}</td>
+    <td style="text-align:right;font-weight:700;color:var(--accent)">$${o.total}</td>
+    <td style="color:var(--text3);font-size:13px">${esc(o.note)}</td>
+    <td style="white-space:nowrap">${!isClosed?`<button class="btn btn-sm" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;" onclick="editOrder(${i})">✏️</button> <button class="btn btn-danger btn-sm" onclick="removeOrder(${i})">✕</button>`:''}</td>
+  </tr>`).join('')}</tbody></table>`;
+  document.getElementById('cnt').textContent=orders.length+' 筆';
+}
+
+// ══════════════════════════════════════════
+// Close / Reopen
+// ══════════════════════════════════════════
+function askClose(){showMo('mo-close');}
+async function doClose(){
+  isClosed=true;hideMo('mo-close');await apiUpdate();applyClosedUI();updateBadge();renderOIBs();
+  const btn=document.getElementById('btn-close');
+  btn.textContent='🔓 重新開放訂單';btn.className='btn btn-success btn-sm';btn.onclick=doReopen;
+  document.getElementById('close-hint').textContent='重新開放後所有人可再次新增訂單';
+}
+async function doReopen(){
+  isClosed=false;await apiUpdate();applyClosedUI();updateBadge();renderOIBs();
+  const btn=document.getElementById('btn-close');
+  btn.textContent='🔒 關閉訂單';btn.className='btn btn-warn btn-sm';btn.onclick=askClose;
+  document.getElementById('close-hint').textContent='關閉後所有人將無法再新增訂單';
+}
+function applyClosedUI(){
+  const form=document.getElementById('order-form');
+  const notice=document.getElementById('closed-notice');
+  const banner=document.getElementById('closed-banner');
+  const btnAdd=document.getElementById('btn-add');
+  if(isClosed){
+    if(form&&!isOwner)form.style.display='none';
+    if(notice&&!isOwner)notice.style.display='flex';
+    banner.classList.add('show');if(btnAdd)btnAdd.disabled=true;
+  }else{
+    if(form)form.style.display='';if(notice)notice.style.display='none';
+    banner.classList.remove('show');if(btnAdd)btnAdd.disabled=false;
+  }
+}
+
+// ══════════════════════════════════════════
+// Summary
+// ══════════════════════════════════════════
+async function renderSummary(){
+  try{const d=await apiRead(orderKey);if(d){orders=d.orders||orders;isClosed=d.isClosed||isClosed;}}catch(e){}
+  const div=document.getElementById('summary');
+  if(!orders.length){div.innerHTML='<div class="empty-s"><div class="ei">📊</div><h3>尚無訂單</h3></div>';return;}
+  const grand=orders.reduce((s,o)=>s+o.total,0);
+  const depts={};orders.forEach(o=>{if(!depts[o.dept])depts[o.dept]=[];depts[o.dept].push(o);});
+  const stats={};orders.forEach(o=>o.items.forEach(it=>{if(!stats[it.name])stats[it.name]={qty:0,total:0};stats[it.name].qty+=it.qty;stats[it.name].total+=it.price*it.qty;}));
+  div.innerHTML=`
+    <div class="card">
+      <div class="card-title">📊 訂餐統計總覽</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+        <div class="oi"><div class="oil">訂單名稱</div><div class="oiv" style="font-size:17px;">${esc(orderInfo.name)}</div></div>
+        <div class="oi"><div class="oil">餐廳</div><div class="oiv">${esc(orderInfo.restaurant)}</div></div>
+        <div class="oi"><div class="oil">日期</div><div class="oiv">${esc(orderInfo.date)}</div></div>
+        ${orderInfo.deadline?`<div class="oi"><div class="oil">截止</div><div class="oiv">${esc(orderInfo.deadline)}</div></div>`:''}
+        <div style="margin-left:auto;"><span class="tag ${isClosed?'tclosed':'topen'}">${isClosed?'🔒 已關閉':'🟢 開放中'}</span></div>
+      </div>
+      ${orderInfo.desc?`<p style="color:var(--text3);font-size:13px;margin-bottom:10px;">💬 ${esc(orderInfo.desc)}</p>`:''}
+      <p style="color:var(--text3);font-size:12px;">產生時間：${new Date().toLocaleString('zh-TW')}</p>
+      <hr class="divider">
+      <div class="sg">
+        <div class="sc"><div class="sl">訂餐總人數</div><div class="sv">${orders.length}</div><div class="su">人</div></div>
+        <div class="sc"><div class="sl">組室數</div><div class="sv">${Object.keys(depts).length}</div><div class="su">個</div></div>
+        <div class="sc" style="border-color:var(--accent);background:var(--accent-light);"><div class="sl">本次訂餐總金額</div><div class="sv">$${grand}</div><div class="su">元</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">🏢 各組室訂單明細</div>
+      <table class="ot"><thead><tr><th>#</th><th>組室</th><th>職稱</th><th>姓名</th><th>餐點明細</th><th style="text-align:right">金額</th><th>備註</th></tr></thead>
+      <tbody>${Object.entries(depts).map(([dept,os])=>{
+        const dt=os.reduce((s,o)=>s+o.total,0);
+        return os.map(o=>{const gi=orders.findIndex(x=>x===o);
+          return `<tr><td>${gi+1}</td><td><span class="tag tdept">${esc(o.dept)}</span></td><td>${esc(o.title)}</td><td>${esc(o.name)}</td><td>${o.items.map(it=>`${it.name}${it.qty>1?'×'+it.qty:''} ($${it.price*it.qty})`).join('、')}</td><td style="text-align:right;font-weight:700;color:var(--accent)">$${o.total}</td><td style="color:var(--text3);font-size:13px">${esc(o.note)}</td></tr>`;
+        }).join('')+`<tr class="gh"><td colspan="5">📌 ${esc(dept)} 小計（${os.length} 人）</td><td style="text-align:right">$${dt}</td><td></td></tr>`;
+      }).join('')}
+      <tr class="tr"><td colspan="5">🎯 本次訂餐總金額（共 ${orders.length} 人）</td><td style="text-align:right">$${grand}</td><td></td></tr>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <div class="card-title">📦 餐點統計</div>
+      <table class="ot"><thead><tr><th>餐點名稱</th><th style="text-align:right">數量</th><th style="text-align:right">合計金額</th></tr></thead>
+      <tbody>${Object.entries(stats).sort((a,b)=>b[1].total-a[1].total).map(([n,s])=>`<tr><td>${esc(n)}</td><td style="text-align:right">${s.qty} 份</td><td style="text-align:right;font-weight:700;color:var(--accent)">$${s.total}</td></tr>`).join('')}
+      <tr class="tr"><td>合計</td><td style="text-align:right">${Object.values(stats).reduce((s,x)=>s+x.qty,0)} 份</td><td style="text-align:right">$${grand}</td></tr>
+      </tbody></table>
+    </div>`;
+}
+
+// ══════════════════════════════════════════
+// Confirm & Submit
+// ══════════════════════════════════════════
+async function openConfirm(){
+  try{const d=await apiRead(orderKey);if(d){orders=d.orders||orders;}}catch(e){}
+  if(!orders.length){alert('尚無訂單。');return;}
+  const grand=orders.reduce((s,o)=>s+o.total,0);
+  const depts={};orders.forEach(o=>{if(!depts[o.dept])depts[o.dept]=[];depts[o.dept].push(o);});
+  document.getElementById('confirm-body').innerHTML=`
+    <div style="margin-bottom:10px;display:flex;gap:16px;flex-wrap:wrap;">
+      <div><span style="color:var(--text3);font-size:12px;">訂單　</span><strong>${esc(orderInfo.name)}</strong></div>
+      <div><span style="color:var(--text3);font-size:12px;">餐廳　</span><strong>${esc(orderInfo.restaurant)}</strong></div>
+      <div><span style="color:var(--text3);font-size:12px;">日期　</span><strong>${esc(orderInfo.date)}</strong></div>
+    </div>
+    <hr style="border:none;border-top:1px dashed var(--border);margin:8px 0;">
+    ${Object.entries(depts).map(([dept,os])=>{
+      const dt=os.reduce((s,o)=>s+o.total,0);
+      return `<div style="margin-bottom:10px;">
+        <div style="font-weight:700;color:var(--blue);font-size:12px;margin-bottom:4px;">🏢 ${esc(dept)}</div>
+        ${os.map(o=>`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 10px;border-bottom:1px solid var(--border);">
+          <span>${esc(o.name)}${o.title?`<span style="color:var(--text3);font-size:11px;margin-left:4px;">(${esc(o.title)})</span>`:''}
+          — ${o.items.map(it=>it.name+(it.qty>1?'×'+it.qty:'')).join('、')}
+          ${o.note?`<span style="color:var(--text3);font-size:11px;"> ／ ${esc(o.note)}</span>`:''}</span>
+          <strong style="color:var(--accent);margin-left:12px;white-space:nowrap;">$${o.total}</strong>
+        </div>`).join('')}
+        <div style="text-align:right;font-size:12px;color:var(--text3);padding-top:4px;">小計 $${dt}</div>
+      </div>`;
+    }).join('')}
+    <hr style="border:none;border-top:2px solid var(--border);margin:8px 0;">
+    <div style="display:flex;justify-content:space-between;font-weight:900;font-size:15px;">
+      <span>共 ${orders.length} 人</span><span style="color:var(--accent);">總計 $${grand}</span>
+    </div>`;
+  showMo('mo-confirm');
+}
+function doSubmit(){
+  hideMo('mo-confirm');
+  const btn=document.getElementById('btn-confirm-order');
+  if(btn){btn.disabled=true;btn.textContent='✅ 已送出';btn.style.background='#6b7280';btn.style.boxShadow='none';}
+  const grand=orders.reduce((s,o)=>s+o.total,0);
+  document.getElementById('suc-line').textContent=`${orderInfo.restaurant}　${orderInfo.date}　共 ${orders.length} 人　$${grand}`;
+  document.getElementById('success-overlay').style.display='flex';
+}
+
+// ══════════════════════════════════════════
+// Header / Info bars
+// ══════════════════════════════════════════
+function updateHeader(){
+  document.getElementById('hdr-info').style.display='';
+  document.getElementById('hdr-name').textContent=orderInfo.name||'';
+  document.getElementById('hdr-sub').textContent=[orderInfo.restaurant,orderInfo.date].filter(Boolean).join('　');
+}
+function updateBadge(){
+  document.getElementById('hdr-status').style.display='';
+  const b=document.getElementById('sbadge');
+  b.className='sbadge '+(isClosed?'s-closed':'s-open');
+  b.innerHTML='<span class="sdot"></span> '+(isClosed?'訂單已關閉':'訂單開放中');
+}
+function renderOIBs(){
+  const html=`
+    <div class="oi"><div class="oil">訂單名稱</div><div class="oiv">${esc(orderInfo.name)}</div></div>
+    <div class="oi"><div class="oil">餐廳</div><div class="oiv">${esc(orderInfo.restaurant)}</div></div>
+    <div class="oi"><div class="oil">日期</div><div class="oiv">${esc(orderInfo.date)}</div></div>
+    ${orderInfo.deadline?`<div class="oi"><div class="oil">截止</div><div class="oiv">${esc(orderInfo.deadline)}</div></div>`:''}
+    <div style="margin-left:auto;"><span class="tag ${isClosed?'tclosed':'topen'}">${isClosed?'🔒 已關閉':'🟢 開放中'}</span></div>`;
+  ['oib-2','oib-4'].forEach(id=>{const el=document.getElementById(id);if(el){el.innerHTML=html;el.style.display='flex';}});
+}
+
+// ══════════════════════════════════════════
+// Helpers
+// ══════════════════════════════════════════
+function showMo(id){document.getElementById(id).classList.add('show');}
+function hideMo(id){document.getElementById(id).classList.remove('show');}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.opacity='1';setTimeout(()=>t.style.opacity='0',2800);}
+function v(id){return document.getElementById(id)?.value?.trim()||'';}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+</script>
+</body>
+</html>
