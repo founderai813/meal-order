@@ -258,8 +258,15 @@ main{max-width:960px;margin:0 auto;padding:24px 20px;}
   <!-- STEP 2 -->
   <div class="panel" id="p-2">
     <div class="oib" id="oib-2"></div>
+
+    <!-- Saved menus -->
+    <div class="card" id="saved-menus-card">
+      <div class="card-title">📚 已儲存的菜單</div>
+      <div id="saved-menus-list"><div style="color:var(--text3);font-size:13px;text-align:center;padding:16px;">載入中...</div></div>
+    </div>
+
     <div class="card">
-      <div class="card-title">📄 上傳菜單</div>
+      <div class="card-title">📄 上傳新菜單</div>
       <p style="color:var(--text3);font-size:13px;margin-bottom:14px;">支援圖片、PDF 或 Word 檔，AI 自動辨識所有餐點與價格</p>
       <div class="upzone" id="upzone" onclick="document.getElementById('menu-fi').click()"
         ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
@@ -273,6 +280,17 @@ main{max-width:960px;margin:0 auto;padding:24px 20px;}
       <div class="loading" id="loading-ai"><div class="spinner"></div><span>AI 正在辨識菜單...</span></div>
       <div id="ai-ok" style="display:none;" class="alert as"><span>✅</span><span id="ai-ok-msg"></span></div>
       <div id="ai-err" style="display:none;" class="alert ad"><span>⚠️</span><span id="ai-err-msg"></span></div>
+
+      <!-- Save menu -->
+      <div id="save-menu-row" style="display:none;margin-top:12px;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface2);padding:12px;border-radius:var(--radius-sm);">
+          <span style="font-size:13px;font-weight:600;color:var(--text2);">💾 儲存這份菜單：</span>
+          <input id="save-menu-name" placeholder="輸入菜單名稱（例：好吃便當店）"
+            style="flex:1;min-width:160px;background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;"
+            onkeydown="if(event.key==='Enter')doSaveMenu()">
+          <button class="btn btn-success btn-sm" onclick="doSaveMenu()">儲存</button>
+        </div>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">✏️ 確認 / 手動輸入餐點</div>
@@ -346,6 +364,19 @@ main{max-width:960px;margin:0 auto;padding:24px 20px;}
     </div>
 
     <div class="alert ad" id="guest-closed" style="display:none;">🔒 此訂單已關閉，無法再新增訂單。</div>
+
+    <!-- Last order recall banner -->
+    <div id="last-order-banner" style="display:none;background:#fef9c3;border:1.5px solid #fcd34d;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:16px;">🕐</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;color:#713f12;">上次你點了：</div>
+          <div style="font-size:12px;color:#92400e;margin-top:2px;" id="last-order-text"></div>
+        </div>
+        <button class="btn btn-sm" onclick="recallLastOrder()" style="background:#fcd34d;border:none;color:#713f12;font-weight:700;white-space:nowrap;">一鍵帶入</button>
+        <button onclick="document.getElementById('last-order-banner').style.display='none'" style="background:none;border:none;cursor:pointer;color:#9e8b78;font-size:16px;">✕</button>
+      </div>
+    </div>
 
     <!-- My order banner -->
     <div class="my-order-banner" id="my-order-banner" style="display:none;">
@@ -508,6 +539,7 @@ function nav(n){
   document.getElementById(pid).classList.add('active');
   document.getElementById('tab-'+n)?.classList.add('active');
   if(n===4) renderOwnerSummary();
+  if(n===2) loadSavedMenus();
   renderOIBs();
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -548,8 +580,67 @@ async function reloadOrder(){
 }
 
 // ══════════════════════════════════════════════════
-// Owner: Step 2 - Menu upload & AI
+// Owner: Saved Menus
 // ══════════════════════════════════════════════════
+async function loadSavedMenus(){
+  const div=document.getElementById('saved-menus-list');
+  if(!div)return;
+  try{
+    const r=await gasCall('listMenus',{});
+    if(!r.ok||!r.menus||!r.menus.length){
+      div.innerHTML='<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px;">尚無儲存的菜單，上傳菜單確認後可選擇儲存</p>';
+      return;
+    }
+    div.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px;">
+      ${r.menus.map(m=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);">
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);">${esc(m.name)}</div>
+            <div style="font-size:11px;color:var(--text3);">${m.count} 個餐點 · 儲存於 ${new Date(m.savedAt).toLocaleDateString('zh-TW')}</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="loadSavedMenu(${JSON.stringify(JSON.stringify(m.items))})">載入</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSavedMenu('${esc(m.name)}')">刪除</button>
+        </div>`).join('')}
+    </div>`;
+  }catch(e){
+    div.innerHTML='<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px;">載入失敗，請稍後再試</p>';
+  }
+}
+
+function loadSavedMenu(itemsJson){
+  const items=JSON.parse(itemsJson);
+  menuItems=items;
+  renderMenuEditor();
+  document.getElementById('ai-ok').style.display='flex';
+  document.getElementById('ai-ok-msg').textContent=`已載入 ${items.length} 個餐點，可在下方確認修改`;
+  document.getElementById('save-menu-row').style.display='none';
+  toast('✅ 菜單已載入！');
+  window.scrollTo({top:document.getElementById('p-2').offsetTop+300,behavior:'smooth'});
+}
+
+async function deleteSavedMenu(name){
+  if(!confirm(`確定要刪除「${name}」這份菜單？`))return;
+  const r=await gasCall('deleteMenu',{name});
+  if(r.ok){toast('已刪除：'+name);loadSavedMenus();}
+  else alert('刪除失敗：'+r.error);
+}
+
+async function doSaveMenu(){
+  const name=document.getElementById('save-menu-name').value.trim();
+  if(!name){alert('請輸入菜單名稱！');return;}
+  const items=menuItems.filter(m=>m.name.trim());
+  if(!items.length){alert('菜單內容為空！');return;}
+  const r=await gasCall('saveMenu',{name,items});
+  if(r.ok){
+    toast('✅ 菜單已儲存：'+name);
+    document.getElementById('save-menu-row').style.display='none';
+    loadSavedMenus();
+  }else{
+    alert('儲存失敗：'+r.error);
+  }
+}
+
+
 async function handleMenuFile(file){
   document.getElementById('loading-ai').classList.add('show');
   document.getElementById('ai-ok').style.display='none';
@@ -569,6 +660,8 @@ async function handleMenuFile(file){
     renderMenuEditor();
     document.getElementById('ai-ok').style.display='flex';
     document.getElementById('ai-ok-msg').textContent=`AI 辨識 ${menuItems.length} 個餐點，請在下方確認`;
+    document.getElementById('save-menu-row').style.display='block';
+    document.getElementById('save-menu-name').value=orderInfo.restaurant||'';
   }catch(e){showAiErr('讀取失敗：'+e.message);}
   finally{document.getElementById('loading-ai').classList.remove('show');}
 }
@@ -903,13 +996,17 @@ function updateBadge(){
   b.innerHTML='<span class="sdot"></span> '+(isClosed?'訂單已關閉':'訂單開放中');
 }
 function renderOIBs(){
+  if(!orderInfo.name) return;
   const dl=orderInfo.deadline?`<div class="oi"><div class="oil">截止</div><div class="oiv">${esc(orderInfo.deadline)}</div></div>`:'';
   const html=`
     <div class="oi"><div class="oil">訂單名稱</div><div class="oiv">${esc(orderInfo.name)}</div></div>
     <div class="oi"><div class="oil">餐廳</div><div class="oiv">${esc(orderInfo.restaurant)}</div></div>
     <div class="oi"><div class="oil">日期</div><div class="oiv">${esc(orderInfo.date)}</div></div>${dl}
     <div style="margin-left:auto;"><span class="tag ${isClosed?'':'tdept'}" style="${isClosed?'background:#fee2e2;color:var(--red)':''}">${isClosed?'🔒 已關閉':'🟢 開放中'}</span></div>`;
-  ['oib-2','oib-3','oib-4'].forEach(id=>{const el=document.getElementById(id);if(el){el.innerHTML=html;el.style.display='flex';}});
+  ['oib-2','oib-3','oib-4'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.innerHTML=html;el.style.display='flex';}
+  });
 }
 
 // ══════════════════════════════════════════════════
