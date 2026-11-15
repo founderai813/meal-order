@@ -3,7 +3,8 @@
 //  使用 PropertiesService 儲存 + Gemini AI 辨識菜單
 // ════════════════════════════════════════════════════
  
-const GEMINI_API_KEY = 'AIzaSyDiM2CClCx2rivVlv1KRTH6qgJiXBn_jfU';
+// API key 不寫在程式裡：到 Apps Script「專案設定 → 指令碼屬性」新增 GEMINI_API_KEY
+const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + GEMINI_API_KEY;
  
 function doGet(e)  { return handle(e); }
